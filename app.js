@@ -4,8 +4,10 @@
    ────────────────────────────────────────────────────────────────────────── */
 
 // App State
-let clientId = localStorage.getItem('pptx_archiver_client_id') || '758353138427-n4j93ju4shr6hcbj9vme905dm1ka25cq.apps.googleusercontent.com';
-let accessToken = null;
+const DEFAULT_CLIENT_ID = '758353138427-n4j93ju4shr6hcbj9vme905dm1ka25cq.apps.googleusercontent.com'; // Google Web Client ID'nizi buraya yapıştırırsanız tüm tarayıcılarda varsayılan olarak tanımlanır!
+let clientId = localStorage.getItem('pptx_archiver_client_id') || DEFAULT_CLIENT_ID || '';
+let accessToken = localStorage.getItem('pptx_archiver_access_token') || null;
+let tokenExpiry = parseInt(localStorage.getItem('pptx_archiver_token_expiry') || '0', 10);
 let tokenClient = null;
 let currentFolderId = null;
 let googleDriveFolders = []; // Cache of day folders
@@ -79,6 +81,9 @@ window.addEventListener('DOMContentLoaded', () => {
     // Initial check and periodic status pings
     checkLocalServiceStatus();
     setInterval(checkLocalServiceStatus, 5000);
+
+    // Google API başlatıcıyı çağır
+    initGoogleClient();
 });
 
 // ──────────────────────── LOCAL BRIDGE INTEGRATION ──────────────────
@@ -191,6 +196,52 @@ function filterLocalFiles() {
 }
 
 // ──────────────────────── GOOGLE DRIVE INTEGRATION ──────────────────
+function initGoogleClient() {
+    if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+        setTimeout(initGoogleClient, 100);
+        return;
+    }
+    
+    if (!clientId) return;
+
+    try {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: clientId,
+            scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
+            callback: (tokenResponse) => {
+                if (tokenResponse.error) {
+                    console.error('Google Auth Error:', tokenResponse.error);
+                    // Silent refresh hatasında çıkış yapıp butonu göster
+                    if (tokenResponse.error === 'immediate_failed') {
+                        onGoogleLogoutSuccess();
+                    }
+                    return;
+                }
+                if (tokenResponse.access_token) {
+                    accessToken = tokenResponse.access_token;
+                    const expiresIn = tokenResponse.expires_in || 3600;
+                    tokenExpiry = Date.now() + (expiresIn - 60) * 1000; // 60sn güvenlik payı
+                    
+                    localStorage.setItem('pptx_archiver_access_token', accessToken);
+                    localStorage.setItem('pptx_archiver_token_expiry', tokenExpiry.toString());
+                    
+                    onGoogleLoginSuccess();
+                }
+            },
+        });
+
+        // Eğer yerel hafızada geçerli (süresi dolmamış) token varsa doğrudan giriş yap
+        if (accessToken && Date.now() < tokenExpiry) {
+            onGoogleLoginSuccess();
+        } else {
+            // Arka planda sessizce giriş yapmayı dene (Kullanıcıya popup göstermeden)
+            tokenClient.requestAccessToken({ prompt: 'none' });
+        }
+    } catch (e) {
+        console.error('Google Client Init Error:', e);
+    }
+}
+
 function handleGoogleAuth() {
     if (!clientId) {
         alert('Lütfen önce ayarlardan Google OAuth Web Client ID değerinizi girin.');
@@ -199,40 +250,29 @@ function handleGoogleAuth() {
     }
 
     if (!tokenClient) {
-        try {
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: clientId,
-                scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly',
-                callback: (tokenResponse) => {
-                    if (tokenResponse.error) {
-                        alert('Google Giriş Hatası: ' + tokenResponse.error);
-                        return;
-                    }
-                    if (tokenResponse.access_token) {
-                        accessToken = tokenResponse.access_token;
-                        onGoogleLoginSuccess();
-                    }
-                },
-            });
-        } catch (e) {
-            console.error('Google Client Init Error:', e);
-            alert('Google kütüphanesi başlatılamadı. Client ID değerinizin doğruluğunu kontrol edin.');
-            return;
-        }
+        initGoogleClient();
+        // Google kütüphanesinin yüklenmesini bekle
+        setTimeout(() => {
+            if (tokenClient) tokenClient.requestAccessToken();
+        }, 200);
+    } else {
+        tokenClient.requestAccessToken(); // Popup açar
     }
-
-    tokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
 function handleGoogleLogout() {
     if (accessToken) {
-        google.accounts.oauth2.revokeToken(accessToken, () => {
-            accessToken = null;
-            onGoogleLogoutSuccess();
-        });
-    } else {
-        onGoogleLogoutSuccess();
+        try {
+            google.accounts.oauth2.revokeToken(accessToken, () => {});
+        } catch (e) {
+            console.error('Revoke error:', e);
+        }
     }
+    accessToken = null;
+    tokenExpiry = 0;
+    localStorage.removeItem('pptx_archiver_access_token');
+    localStorage.removeItem('pptx_archiver_token_expiry');
+    onGoogleLogoutSuccess();
 }
 
 function onGoogleLoginSuccess() {
@@ -521,7 +561,12 @@ function saveSettings() {
     // Reset GIS token client so it gets re-initialized with new client ID
     tokenClient = null;
     accessToken = null;
+    tokenExpiry = 0;
+    localStorage.removeItem('pptx_archiver_access_token');
+    localStorage.removeItem('pptx_archiver_token_expiry');
+    
     onGoogleLogoutSuccess();
+    initGoogleClient();
     
     closeSettingsModal();
     alert('Ayarlar kaydedildi.');
