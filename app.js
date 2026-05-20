@@ -4,7 +4,7 @@
    ────────────────────────────────────────────────────────────────────────── */
 
 // App State
-let clientId = localStorage.getItem('pptx_archiver_client_id') || '';
+let clientId = localStorage.getItem('pptx_archiver_client_id') || '758353138427-n4j93ju4shr6hcbj9vme905dm1ka25cq.apps.googleusercontent.com';
 let accessToken = null;
 let tokenClient = null;
 let currentFolderId = null;
