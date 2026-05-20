@@ -13,6 +13,7 @@ let currentFolderId = null;
 let googleDriveFolders = []; // Cache of day folders
 let currentFolderFiles = []; // Cache of files in current folder
 let localFiles = [];         // Cache of local files
+let useBridgeForDrive = false;
 
 // DOM Elements
 const badgeStatus = document.getElementById('service-status-badge');
@@ -48,7 +49,9 @@ const currentFolderTitle = document.getElementById('current-folder-title');
 const btnBackToFolders = document.getElementById('btn-back-to-folders');
 
 // Bridge API URL
-const BRIDGE_API_URL = 'http://localhost:58291';
+const BRIDGE_API_URL = window.location.port === '58291'
+    ? window.location.origin
+    : 'http://localhost:58291';
 
 // ────────────────────────── INITIALIZATION ──────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
@@ -103,6 +106,17 @@ async function checkLocalServiceStatus() {
         sysPlatform.textContent = formatPlatform(data.platform);
         sysUptime.textContent = formatUptime(data.uptime_seconds);
 
+        // Drive bridge status
+        const oldUseBridge = useBridgeForDrive;
+        useBridgeForDrive = data.drive_enabled || false;
+        
+        updateDriveUIState();
+
+        // If we switched to using bridge, auto-load cloud files
+        if (useBridgeForDrive && !oldUseBridge) {
+            refreshCloudData();
+        }
+
         // Load local files
         fetchLocalFiles();
     } catch (error) {
@@ -113,6 +127,21 @@ async function checkLocalServiceStatus() {
         sysComputer.textContent = '—';
         sysPlatform.textContent = '—';
         sysUptime.textContent = '—';
+
+        // Bridge is offline, so we cannot use it for Drive
+        const oldUseBridge = useBridgeForDrive;
+        useBridgeForDrive = false;
+        
+        updateDriveUIState();
+        
+        if (oldUseBridge) {
+            // We lost bridge connection, check client-side token or revert to auth placeholder
+            if (accessToken) {
+                refreshCloudData();
+            } else {
+                onGoogleLogoutSuccess();
+            }
+        }
 
         // Clear local files view
         localFiles = [];
@@ -233,8 +262,8 @@ function initGoogleClient() {
         // Eğer yerel hafızada geçerli (süresi dolmamış) token varsa doğrudan giriş yap
         if (accessToken && Date.now() < tokenExpiry) {
             onGoogleLoginSuccess();
-        } else {
-            // Arka planda sessizce giriş yapmayı dene (Kullanıcıya popup göstermeden)
+        } else if (!useBridgeForDrive) {
+            // Sadece lokal bağlantı yoksa arka planda sessizce giriş yapmayı dene
             tokenClient.requestAccessToken({ prompt: 'none' });
         }
     } catch (e) {
@@ -243,6 +272,8 @@ function initGoogleClient() {
 }
 
 function handleGoogleAuth() {
+    if (useBridgeForDrive) return; // Bridge aktifse auth butonları gizlidir zaten ama güvenlik koruması
+
     if (!clientId) {
         alert('Lütfen önce ayarlardan Google OAuth Web Client ID değerinizi girin.');
         openSettingsModal();
@@ -275,25 +306,45 @@ function handleGoogleLogout() {
     onGoogleLogoutSuccess();
 }
 
+function updateDriveUIState() {
+    if (useBridgeForDrive) {
+        // Logged in via Python service
+        btnGoogleAuth.classList.add('hidden');
+        btnGoogleLogout.classList.add('hidden');
+        cloudFilters.classList.remove('hidden');
+        cloudAuthPlaceholder.classList.add('hidden');
+    } else {
+        // Client-side authentication flow
+        if (accessToken) {
+            btnGoogleAuth.classList.add('hidden');
+            btnGoogleLogout.classList.remove('hidden');
+            cloudFilters.classList.remove('hidden');
+            cloudAuthPlaceholder.classList.add('hidden');
+        } else {
+            btnGoogleAuth.classList.remove('hidden');
+            btnGoogleLogout.classList.add('hidden');
+            cloudFilters.classList.add('hidden');
+            
+            // Show placeholder if we're not loading or showing files
+            if (cloudLoading.classList.contains('hidden') && cloudFilesView.classList.contains('hidden') && cloudEmpty.classList.contains('hidden')) {
+                cloudAuthPlaceholder.classList.remove('hidden');
+            }
+        }
+    }
+}
+
 function onGoogleLoginSuccess() {
-    btnGoogleAuth.classList.add('hidden');
-    btnGoogleLogout.classList.remove('hidden');
-    cloudFilters.classList.remove('hidden');
-    cloudAuthPlaceholder.classList.add('hidden');
-    
+    updateDriveUIState();
     refreshCloudData();
 }
 
 function onGoogleLogoutSuccess() {
-    btnGoogleAuth.classList.remove('hidden');
-    btnGoogleLogout.classList.add('hidden');
-    cloudFilters.classList.add('hidden');
+    updateDriveUIState();
     
     // Clear elements
     cloudFilesView.classList.add('hidden');
     cloudEmpty.classList.add('hidden');
     cloudLoading.classList.add('hidden');
-    cloudAuthPlaceholder.classList.remove('hidden');
     
     googleDriveFolders = [];
     currentFolderFiles = [];
@@ -301,18 +352,24 @@ function onGoogleLogoutSuccess() {
 }
 
 async function refreshCloudData() {
-    if (!accessToken) return;
+    if (!accessToken && !useBridgeForDrive) return;
     
     showCloudLoading(true);
     try {
-        const rootFolderId = await getOrCreateRootFolder();
-        if (!rootFolderId) {
-            showCloudEmpty(true);
-            return;
+        if (useBridgeForDrive) {
+            const response = await fetch(`${BRIDGE_API_URL}/cloud-files`);
+            const resData = await response.json();
+            if (resData.error) throw new Error(resData.error);
+            googleDriveFolders = resData.data || [];
+        } else {
+            const rootFolderId = await getOrCreateRootFolder();
+            if (!rootFolderId) {
+                showCloudEmpty(true);
+                return;
+            }
+            googleDriveFolders = await getDayFolders(rootFolderId);
         }
-
-        // Fetch day folders
-        googleDriveFolders = await getDayFolders(rootFolderId);
+        
         showCloudLoading(false);
 
         if (googleDriveFolders.length === 0) {
@@ -324,8 +381,12 @@ async function refreshCloudData() {
     } catch (e) {
         showCloudLoading(false);
         console.error(e);
-        alert('Google Drive verileri çekilirken hata oluştu. Giriş token süresi dolmuş olabilir, lütfen tekrar giriş yapın.');
-        onGoogleLogoutSuccess();
+        if (useBridgeForDrive) {
+            alert('Google Drive verileri lokal program üzerinden çekilirken hata oluştu: ' + e.message);
+        } else {
+            alert('Google Drive verileri çekilirken hata oluştu. Giriş token süresi dolmuş olabilir, lütfen tekrar giriş yapın.');
+            onGoogleLogoutSuccess();
+        }
     }
 }
 
@@ -430,7 +491,14 @@ async function openFolder(folderId, folderName) {
     currentFolderId = folderId;
     showCloudLoading(true);
     try {
-        currentFolderFiles = await getFilesInFolder(folderId);
+        if (useBridgeForDrive) {
+            const response = await fetch(`${BRIDGE_API_URL}/cloud-files?folderId=${folderId}`);
+            const resData = await response.json();
+            if (resData.error) throw new Error(resData.error);
+            currentFolderFiles = resData.data || [];
+        } else {
+            currentFolderFiles = await getFilesInFolder(folderId);
+        }
         showCloudLoading(false);
         cloudFilesView.classList.remove('hidden');
         cloudFoldersGrid.classList.add('hidden');
@@ -518,11 +586,19 @@ function renderFilesView() {
 async function deleteCloudFile(fileId, fileName) {
     showCloudLoading(true);
     try {
-        // Move file to trash (Google Drive PATCH metadata)
-        await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ trashed: true })
-        });
+        if (useBridgeForDrive) {
+            const response = await fetch(`${BRIDGE_API_URL}/delete-cloud?fileId=${fileId}`, {
+                method: 'DELETE'
+            });
+            const resData = await response.json();
+            if (resData.error) throw new Error(resData.error);
+        } else {
+            // Move file to trash (Google Drive PATCH metadata)
+            await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ trashed: true })
+            });
+        }
         
         // Remove from local cache and refresh files list
         currentFolderFiles = currentFolderFiles.filter(f => f.id !== fileId);
