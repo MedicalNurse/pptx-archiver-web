@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PPTX Silent Archiver — Dashboard</title>
+    <meta name="description" content="PPTX Silent Archiver yerel ve bulut tabanlı sunum yedekleme yönetim paneli.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- CSS Style -->
+    <link rel="stylesheet" href="index.css">
+    <!-- Google Identity Services (GIS) for OAuth2 -->
+    <script src="https://accounts.google.com/gsi/client" defer></script>
+</head>
+<body>
+    <!-- Background Glows -->
+    <div class="glow-bg glow-1"></div>
+    <div class="glow-bg glow-2"></div>
+
+    <!-- Header Section -->
+    <header class="app-header">
+        <div class="header-container">
+            <div class="brand">
+                <div class="logo-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h1>PPTX Silent Archiver</h1>
+                    <span>Yedekleme & Yönetim Sistemi</span>
+                </div>
+            </div>
+
+            <!-- Status Indicator and Actions -->
+            <div class="header-actions">
+                <div id="service-status-badge" class="status-badge status-passive">
+                    <span class="status-dot"></span>
+                    <span id="status-text">Bağlantı Aranıyor...</span>
+                </div>
+                <button id="btn-settings" class="icon-button" title="Ayarlar" aria-label="Ayarları Aç">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.43l-1.003.828c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.43l1.004-.827c.292-.24.437-.613.43-.991a6.936 6.936 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <!-- Dashboard Grid -->
+        <div class="dashboard-grid">
+            
+            <!-- Left Side: System Info & Local Archives -->
+            <section class="grid-col-left">
+                <!-- Program Info Card -->
+                <div class="card glass-card info-card">
+                    <div class="card-header">
+                        <h2>Sistem Bilgileri</h2>
+                    </div>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="info-label">Bilgisayar Adı</span>
+                            <span id="sys-computer" class="info-value">—</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Çalışma Süresi (Uptime)</span>
+                            <span id="sys-uptime" class="info-value">—</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Platform</span>
+                            <span id="sys-platform" class="info-value">—</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Local Files Card -->
+                <div class="card glass-card local-files-card">
+                    <div class="card-header">
+                        <h2>Bilgisayardaki Yerel Arşivler</h2>
+                        <span id="local-count" class="badge">0 Dosya</span>
+                    </div>
+                    <div class="search-box">
+                        <input type="text" id="local-search" placeholder="Yerel arşivlerde ara...">
+                    </div>
+                    <div class="file-list-container">
+                        <div id="local-files-placeholder" class="placeholder">
+                            <p>Lokal servis aktif değil veya dosya bulunamadı.</p>
+                        </div>
+                        <ul id="local-files-list" class="file-list hidden">
+                            <!-- Dynamically populated -->
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Side: Cloud Archives (Google Drive) -->
+            <section class="grid-col-right">
+                <div class="card glass-card cloud-card">
+                    <div class="card-header cloud-header">
+                        <div>
+                            <h2>Bulut Arşivleri (Google Drive)</h2>
+                            <p class="section-desc">Drive'a yedeklenen PPTX ve sunum dosyalarınız</p>
+                        </div>
+                        <div class="cloud-actions">
+                            <button id="btn-google-auth" class="btn btn-primary btn-google">
+                                <svg class="google-icon" viewBox="0 0 24 24">
+                                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                </svg>
+                                <span>Giriş Yap</span>
+                            </button>
+                            <button id="btn-google-logout" class="btn btn-secondary hidden">Çıkış Yap</button>
+                        </div>
+                    </div>
+
+                    <!-- Search & Filter Controls -->
+                    <div class="filter-bar hidden" id="cloud-filters">
+                        <div class="search-box">
+                            <input type="text" id="cloud-search" placeholder="Bulut arşivlerinde ara...">
+                        </div>
+                        <button id="btn-refresh-cloud" class="icon-button" title="Yenile">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Cloud Content Area -->
+                    <div class="cloud-content-container">
+                        <!-- Unauthenticated / Login Needed -->
+                        <div id="cloud-auth-placeholder" class="placeholder">
+                            <svg class="placeholder-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            <h3>Drive Dosyalarına Erişmek İçin Giriş Yapın</h3>
+                            <p>Programın Drive'a yüklediği sunumları görmek ve yönetmek için Google hesabınızı bağlamanız gerekmektedir.</p>
+                        </div>
+
+                        <!-- Loading State -->
+                        <div id="cloud-loading" class="placeholder hidden">
+                            <div class="spinner"></div>
+                            <p>Drive dosyaları yükleniyor...</p>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div id="cloud-empty" class="placeholder hidden">
+                            <svg class="placeholder-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+                            </svg>
+                            <h3>Henüz Yüklenmiş Dosya Yok</h3>
+                            <p>Belirlenen klasörlerde PowerPoint dosyası açılıp değiştirildiğinde otomatik olarak burada gözükecektir.</p>
+                        </div>
+
+                        <!-- Folders & Files Grid -->
+                        <div id="cloud-files-view" class="cloud-explorer hidden">
+                            <div id="cloud-folders-grid" class="folders-grid">
+                                <!-- Day Folders rendered dynamically -->
+                            </div>
+                            <div class="explorer-section-title">
+                                <h3 id="current-folder-title">Dosyalar</h3>
+                                <button id="btn-back-to-folders" class="btn btn-secondary btn-sm hidden">← Klasörlere Dön</button>
+                            </div>
+                            <div id="cloud-files-grid" class="files-grid">
+                                <!-- Files inside selected folder -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Setup Guide Section -->
+        <section class="setup-section">
+            <div class="card glass-card">
+                <div class="card-header">
+                    <h2>Program Kurulumu ve Kullanım Kılavuzu</h2>
+                </div>
+                <div class="guide-grid">
+                    <div class="guide-step">
+                        <div class="step-num">1</div>
+                        <h3>Proje Dosyalarını Edinin</h3>
+                        <p>Tüm proje dosyalarını (ve web klasörünü) bilgisayarınıza indirin. Servis dosyasını çalıştırmak için gerekli kütüphaneleri kurun.</p>
+                        <code class="code-block">pip install psutil pystray google-api-python-client google-auth-oauthlib watchdog pillow</code>
+                    </div>
+                    <div class="guide-step">
+                        <div class="step-num">2</div>
+                        <h3>Programı Çalıştırın</h3>
+                        <p>Artık her iki işlevi de barındıran servis dosyasını çalıştırarak hem sistem tepsisini (tray) hem de bu arayüzle konuşan köprüyü aktif edebilirsiniz:</p>
+                        <code class="code-block">python pptx_archiver_service.py</code>
+                        <p class="tip">Not: Program arka planda gizli çalışır. Sağ alttaki sistem tepsisinde (Tray) mavi yuvarlak ikonunu görebilirsiniz.</p>
+                    </div>
+                    <div class="guide-step">
+                        <div class="step-num">3</div>
+                        <h3>Google Web Client ID Ayarlayın</h3>
+                        <p>Google Cloud Console üzerinden oluşturduğunuz <b>Web Uygulaması Client ID</b>'nizi sağ üstteki çark ikonundan girin. Bu işlem tarayıcıdan Drive API'ye güvenli erişim için şarttır.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="modal glass-modal">
+            <div class="modal-header">
+                <h2>OAuth Arayüz Ayarları</h2>
+                <button id="btn-close-settings" class="icon-button" aria-label="Kapat">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="input-client-id">Google OAuth Web Client ID</label>
+                    <input type="text" id="input-client-id" placeholder="Örn: 123456789-abcdefg.apps.googleusercontent.com">
+                    <p class="field-help">Bu anahtar tamamen tarayıcınızda (localStorage) saklanır. Sunucularımıza veya GitHub'a asla gitmez.</p>
+                </div>
+                
+                <div class="instructions-accordion">
+                    <h3>Google Cloud Kurulum Rehberi</h3>
+                    <ol>
+                        <li><a href="https://console.cloud.google.com" target="_blank" rel="noopener">Google Cloud Console</a> sitesine gidin.</li>
+                        <li><b>APIs & Services > Credentials</b> sekmesine geçin.</li>
+                        <li><b>Create Credentials > OAuth client ID</b> butonuna tıklayın.</li>
+                        <li>Application Type olarak <b>Web Application</b> seçin.</li>
+                        <li><b>Authorized JavaScript origins</b> kısmına şunları ekleyin:
+                            <ul>
+                                <li><code>http://localhost:58291</code> (Lokal test için)</li>
+                                <li><code>https://[kullanıcı-adınız].github.io</code> (GitHub Pages için)</li>
+                            </ul>
+                        </li>
+                        <li>Oluşturulan <b>Client ID</b> değerini kopyalayıp yukarıdaki kutuya yapıştırın ve Kaydet'e basın.</li>
+                    </ol>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-save-settings" class="btn btn-primary">Ayarları Kaydet</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JS Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
