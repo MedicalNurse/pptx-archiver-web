@@ -14,6 +14,7 @@ let googleDriveFolders = []; // Cache of day folders
 let currentFolderFiles = []; // Cache of files in current folder
 let localFiles = [];         // Cache of local files
 let useBridgeForDrive = false;
+let folderPathStack = [];    // Navigation path stack for cloud browsing
 
 // DOM Elements
 const badgeStatus = document.getElementById('service-status-badge');
@@ -31,6 +32,7 @@ const btnSettings = document.getElementById('btn-settings');
 const btnCloseSettings = document.getElementById('btn-close-settings');
 const btnSaveSettings = document.getElementById('btn-save-settings');
 const inputClientId = document.getElementById('input-client-id');
+const inputGeminiKey = document.getElementById('input-gemini-key');
 const settingsModal = document.getElementById('settings-modal');
 
 const btnGoogleAuth = document.getElementById('btn-google-auth');
@@ -76,7 +78,7 @@ window.addEventListener('DOMContentLoaded', () => {
     btnGoogleAuth.addEventListener('click', handleGoogleAuth);
     btnGoogleLogout.addEventListener('click', handleGoogleLogout);
     btnRefreshCloud.addEventListener('click', refreshCloudData);
-    btnBackToFolders.addEventListener('click', showFoldersView);
+    btnBackToFolders.addEventListener('click', handleBackNavigation);
 
     localSearchInput.addEventListener('input', filterLocalFiles);
     cloudSearchInput.addEventListener('input', filterCloudFiles);
@@ -109,6 +111,15 @@ async function checkLocalServiceStatus() {
         // Drive bridge status
         const oldUseBridge = useBridgeForDrive;
         useBridgeForDrive = data.drive_enabled || false;
+        
+        // Show status of Gemini Key
+        if (data.gemini_api_key_configured) {
+            if (!inputGeminiKey.value) {
+                inputGeminiKey.placeholder = 'API Anahtarı Tanımlı (Değiştirmek için yazın)';
+            }
+        } else {
+            inputGeminiKey.placeholder = 'Örn: AIzaSy...';
+        }
         
         updateDriveUIState();
 
@@ -478,11 +489,11 @@ function renderFoldersView() {
                 <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM22.5 12V9a3 3 0 00-3-3h-6.879a1.5 1.5 0 01-1.06-.44L7.439 4.44A2.999 2.999 0 005.318 3.5H4.5A3 3 0 001.5 6.5v5.5H22.5z"/>
             </svg>
             <div class="folder-info">
-                <span class="folder-name" title="${folder.name}">${folder.name}</span>
+                <span class="folder-name text-ellipsis" title="${folder.name}">${folder.name}</span>
                 <span class="folder-count">Yedek Klasörü</span>
             </div>
         `;
-        div.addEventListener('click', () => openFolder(folder.id, folder.name));
+        div.addEventListener('click', () => navigateToFolder(folder.id, folder.name));
         cloudFoldersGrid.appendChild(div);
     });
 }
@@ -514,7 +525,28 @@ async function openFolder(folderId, folderName) {
 }
 
 function showFoldersView() {
+    folderPathStack = [];
     renderFoldersView();
+}
+
+async function navigateToFolder(folderId, folderName) {
+    const idx = folderPathStack.findIndex(f => f.id === folderId);
+    if (idx !== -1) {
+        folderPathStack = folderPathStack.slice(0, idx + 1);
+    } else {
+        folderPathStack.push({ id: folderId, name: folderName });
+    }
+    await openFolder(folderId, folderName);
+}
+
+function handleBackNavigation() {
+    if (folderPathStack.length <= 1) {
+        showFoldersView();
+    } else {
+        folderPathStack.pop();
+        const parent = folderPathStack[folderPathStack.length - 1];
+        openFolder(parent.id, parent.name);
+    }
 }
 
 function renderFilesView() {
@@ -527,13 +559,35 @@ function renderFilesView() {
     if (filtered.length === 0) {
         cloudFilesGrid.innerHTML = `
             <div class="placeholder" style="grid-column: 1 / -1; padding: 2rem 0;">
-                <p>Bu klasörde aranan kriterlere uygun dosya bulunamadı.</p>
+                <p>Bu klasör boş veya aranan kriterlere uygun dosya bulunamadı.</p>
             </div>
         `;
         return;
     }
 
-    filtered.forEach(file => {
+    // Separate folders and files
+    const folders = filtered.filter(f => f.mimeType === 'application/vnd.google-apps.folder');
+    const files = filtered.filter(f => f.mimeType !== 'application/vnd.google-apps.folder');
+
+    // Render folders first
+    folders.forEach(folder => {
+        const div = document.createElement('div');
+        div.className = 'folder-card mini-folder-card';
+        div.innerHTML = `
+            <svg class="folder-icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M19.5 21a3 3 0 003-3v-4.5a3 3 0 00-3-3h-15a3 3 0 00-3 3V18a3 3 0 003 3h15zM22.5 12V9a3 3 0 00-3-3h-6.879a1.5 1.5 0 01-1.06-.44L7.439 4.44A2.999 2.999 0 005.318 3.5H4.5A3 3 0 001.5 6.5v5.5H22.5z"/>
+            </svg>
+            <div class="folder-info">
+                <span class="folder-name text-ellipsis" title="${folder.name}">${folder.name}</span>
+                <span class="folder-count">Klasör</span>
+            </div>
+        `;
+        div.addEventListener('click', () => navigateToFolder(folder.id, folder.name));
+        cloudFilesGrid.appendChild(div);
+    });
+
+    // Render files
+    files.forEach(file => {
         const div = document.createElement('div');
         div.className = 'file-card';
         
@@ -551,7 +605,7 @@ function renderFilesView() {
                     </svg>
                 </div>
                 <div class="file-card-details">
-                    <span class="file-card-title" title="${file.name}">${file.name}</span>
+                    <span class="file-card-title text-ellipsis" title="${file.name}">${file.name}</span>
                     <span class="file-card-meta">${formatBytes(file.size)}</span>
                     <span class="file-card-meta">${formattedDate}</span>
                 </div>
@@ -625,7 +679,7 @@ function closeSettingsModal() {
     settingsModal.classList.add('hidden');
 }
 
-function saveSettings() {
+async function saveSettings() {
     const rawVal = inputClientId.value.trim();
     if (!rawVal) {
         alert('Lütfen geçerli bir Google OAuth Client ID girin.');
@@ -633,6 +687,31 @@ function saveSettings() {
     }
     clientId = rawVal;
     localStorage.setItem('pptx_archiver_client_id', clientId);
+    
+    // Save Gemini API key if present and bridge is online
+    const geminiKey = inputGeminiKey.value.trim();
+    let bridgeSaved = false;
+    let bridgeSaveError = null;
+    
+    if (useBridgeForDrive || badgeStatus.classList.contains('status-active')) {
+        try {
+            const response = await fetch(`${BRIDGE_API_URL}/save-settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ gemini_api_key: geminiKey })
+            });
+            if (response.ok) {
+                bridgeSaved = true;
+                // Clear input so it shows the placeholder next time
+                inputGeminiKey.value = '';
+            } else {
+                const errData = await response.json().catch(() => ({}));
+                bridgeSaveError = errData.error || `HTTP ${response.status}`;
+            }
+        } catch (e) {
+            bridgeSaveError = e.message;
+        }
+    }
     
     // Reset GIS token client so it gets re-initialized with new client ID
     tokenClient = null;
@@ -645,7 +724,16 @@ function saveSettings() {
     initGoogleClient();
     
     closeSettingsModal();
-    alert('Ayarlar kaydedildi.');
+    
+    let msg = 'Ayarlar kaydedildi.';
+    if (geminiKey) {
+        if (bridgeSaved) {
+            msg += '\nGemini API Anahtarı lokal sunucuya başarıyla kaydedildi.';
+        } else {
+            msg += `\nUyarı: Gemini API Anahtarı lokal sunucuya kaydedilemedi (${bridgeSaveError || 'Lokal program kapalı'}).`;
+        }
+    }
+    alert(msg);
 }
 
 // ──────────────────────── UTILITY HELPERS ───────────────────────────
