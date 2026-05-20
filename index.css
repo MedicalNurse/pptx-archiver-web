@@ -849,6 +849,11 @@ body {
     list-style-type: circle;
 }
 
+/* Mini Folder Card */
+.mini-folder-card {
+    border-left: 3px solid var(--color-warning) !important;
+}
+
 /* Helpers */
 .hidden {
     display: none !important;
