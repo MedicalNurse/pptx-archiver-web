@@ -50,6 +50,22 @@ const cloudFilesGrid = document.getElementById('cloud-files-grid');
 const currentFolderTitle = document.getElementById('current-folder-title');
 const btnBackToFolders = document.getElementById('btn-back-to-folders');
 
+// Gemini Test & AI Chat DOM Elements
+const btnTestGemini = document.getElementById('btn-test-gemini');
+const geminiTestStatus = document.getElementById('gemini-test-status');
+const geminiTestText = document.getElementById('gemini-test-text');
+
+const aiChatPanel = document.getElementById('ai-chat-panel');
+const btnCloseChat = document.getElementById('btn-close-chat');
+const chatMessagesContainer = document.getElementById('chat-messages-container');
+const chatInput = document.getElementById('chat-input');
+const btnSendChat = document.getElementById('btn-send-chat');
+const chatFileContext = document.getElementById('chat-file-context');
+
+// AI Chat State
+let activeChatFile = null; // { id, name, localFilename }
+let chatHistory = [];
+
 // Bridge API URL
 const BRIDGE_API_URL = window.location.port === '58291'
     ? window.location.origin
@@ -82,6 +98,23 @@ window.addEventListener('DOMContentLoaded', () => {
 
     localSearchInput.addEventListener('input', filterLocalFiles);
     cloudSearchInput.addEventListener('input', filterCloudFiles);
+
+    // Gemini API Connection Test Listener
+    btnTestGemini.addEventListener('click', testGeminiConnection);
+
+    // AI Chat panel listeners
+    btnCloseChat.addEventListener('click', closeAiChat);
+    aiChatPanel.addEventListener('click', (e) => {
+        if (e.target === aiChatPanel) closeAiChat();
+    });
+
+    btnSendChat.addEventListener('click', sendChatMessage);
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    });
 
     // Initial check and periodic status pings
     checkLocalServiceStatus();
@@ -197,6 +230,11 @@ function renderLocalFiles() {
                 <span class="file-meta">${formatBytes(file.size_bytes)} • ${file.modified_at}</span>
             </div>
             <div class="file-actions">
+                <button class="icon-button btn-ai-chat-local" data-filename="${file.name}" title="Yapay Zekaya Sor">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                </button>
                 <button class="icon-button icon-button-danger btn-delete-local" data-filename="${file.name}" title="Yerel Kopyayı Sil">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
@@ -214,6 +252,14 @@ function renderLocalFiles() {
             if (confirm(`"${filename}" yerel arşiv kopyasını kalıcı olarak silmek istediğinize emin misiniz? (Drive kopyası etkilenmez)`)) {
                 deleteLocalFile(filename);
             }
+        });
+    });
+
+    // Add AI chat listeners
+    document.querySelectorAll('.btn-ai-chat-local').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const filename = e.currentTarget.getAttribute('data-filename');
+            openAiChat(null, filename, filename);
         });
     });
 }
@@ -614,6 +660,9 @@ function renderFilesView() {
                 <a href="${file.webViewLink}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Önizle">
                     Önizle
                 </a>
+                <button class="btn btn-secondary btn-sm btn-ai-chat-cloud" data-id="${file.id}" data-name="${file.name}" title="Yapay Zekaya Sor">
+                    Sor
+                </button>
                 <a href="${file.webContentLink}" target="_blank" rel="noopener" class="btn btn-primary btn-sm" title="İndir">
                     İndir
                 </a>
@@ -633,6 +682,15 @@ function renderFilesView() {
             if (confirm(`"${fileName}" dosyasını Google Drive arşivinden silmek istediğinize emin misiniz?`)) {
                 deleteCloudFile(fileId, fileName);
             }
+        });
+    });
+
+    // Add AI chat listeners
+    document.querySelectorAll('.btn-ai-chat-cloud').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const fileId = e.currentTarget.getAttribute('data-id');
+            const fileName = e.currentTarget.getAttribute('data-name');
+            openAiChat(fileId, fileName, null);
         });
     });
 }
@@ -673,6 +731,7 @@ function filterCloudFiles() {
 // ──────────────────────── SETTINGS MODAL ────────────────────────────
 function openSettingsModal() {
     settingsModal.classList.remove('hidden');
+    geminiTestStatus.classList.add('hidden');
 }
 
 function closeSettingsModal() {
@@ -768,4 +827,203 @@ function formatPlatform(platform) {
     if (platform === 'darwin') return 'macOS';
     if (platform === 'linux') return 'Linux';
     return platform;
+}
+
+// ──────────────────────── GEMINI & AI CHAT ASSISTANT ──────────────────
+async function testGeminiConnection() {
+    const key = inputGeminiKey.value.trim();
+    if (!key) {
+        alert('Lütfen test etmek için önce bir Gemini API anahtarı girin.');
+        return;
+    }
+    
+    geminiTestStatus.classList.remove('hidden', 'test-status-success', 'test-status-error');
+    geminiTestStatus.classList.add('test-status-loading');
+    geminiTestText.textContent = 'Durum: Bağlantı kuruluyor...';
+    
+    try {
+        const response = await fetch(`${BRIDGE_API_URL}/test-gemini`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ gemini_api_key: key })
+        });
+        
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            geminiTestStatus.classList.remove('test-status-loading');
+            geminiTestStatus.classList.add('test-status-success');
+            geminiTestText.textContent = data.message || 'Durum: API bağlantısı başarılı!';
+        } else {
+            throw new Error(data.message || 'Yanıt başarısız.');
+        }
+    } catch (e) {
+        geminiTestStatus.classList.remove('test-status-loading');
+        geminiTestStatus.classList.add('test-status-error');
+        geminiTestText.textContent = `Hata: ${e.message}`;
+    }
+}
+
+function openAiChat(fileId, fileName, localFilename) {
+    activeChatFile = { id: fileId, name: fileName, localFilename: localFilename };
+    chatHistory = [];
+    
+    chatFileContext.textContent = fileName ? `Dosya: ${fileName}` : 'Genel Tıbbi Asistan Sohbeti';
+    aiChatPanel.classList.remove('hidden');
+    
+    // Clear and set welcome message
+    chatMessagesContainer.innerHTML = '';
+    
+    const welcomeDiv = document.createElement('div');
+    welcomeDiv.className = 'chat-bubble model-bubble welcome-bubble';
+    
+    let welcomeText = `<p>Merhaba! Tıp Fakültesi Ders Notları Yapay Zeka Asistanına hoş geldiniz. 😊</p>`;
+    if (fileName) {
+        welcomeText += `<p>Şu an incelediğimiz ders notu: <strong>${fileName}</strong></p>
+        <p>Bu sunum içeriğine göre bana soru sorabilir veya aşağıdaki hızlı komutları kullanabilirsiniz:</p>
+        <div class="quick-prompts">
+            <button class="btn btn-secondary btn-sm quick-prompt-btn" onclick="sendQuickPrompt('Bu ders notunu özetle')">📝 Notu Özetle</button>
+            <button class="btn btn-secondary btn-sm quick-prompt-btn" onclick="sendQuickPrompt('Bu ders notundan 5 adet çalışma sorusu çıkar')">❓ 5 adet çalışma sorusu çıkar</button>
+            <button class="btn btn-secondary btn-sm quick-prompt-btn" onclick="sendQuickPrompt('Bu ders notundaki en önemli tıbbi terimleri ve tanımlarını açıkla')">🔬 Önemli terimleri açıkla</button>
+        </div>`;
+    } else {
+        welcomeText += `<p>Herhangi bir ders notu seçmediniz, ancak tıp konuları hakkında genel tıbbi sorularınızı sorabilirsiniz.</p>`;
+    }
+    
+    welcomeDiv.innerHTML = welcomeText;
+    chatMessagesContainer.appendChild(welcomeDiv);
+    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    
+    chatInput.focus();
+}
+
+function closeAiChat() {
+    aiChatPanel.classList.add('hidden');
+    activeChatFile = null;
+    chatHistory = [];
+}
+
+// Exposed global helper for quick prompts
+window.sendQuickPrompt = function(promptText) {
+    chatInput.value = promptText;
+    sendChatMessage();
+};
+
+async function sendChatMessage() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    
+    chatInput.value = '';
+    
+    // Append User message to UI
+    appendChatBubble(text, 'user');
+    
+    // Append Typing Indicator
+    const typingIndicator = appendTypingIndicator();
+    
+    try {
+        const payload = {
+            filename: activeChatFile.name,
+            file_id: activeChatFile.id,
+            local_filename: activeChatFile.localFilename,
+            message: text,
+            history: chatHistory
+        };
+        
+        const response = await fetch(`${BRIDGE_API_URL}/ai-chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        // Remove typing indicator
+        typingIndicator.remove();
+        
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            appendChatBubble(data.message, 'model');
+            // Save to history
+            chatHistory.push({ role: 'user', text: text });
+            chatHistory.push({ role: 'model', text: data.message });
+        } else {
+            throw new Error(data.message || 'API yanıtı başarısız.');
+        }
+    } catch (e) {
+        typingIndicator.remove();
+        appendChatBubble(`Sohbet hatası oluştu: ${e.message}`, 'model');
+    }
+}
+
+function appendChatBubble(text, role) {
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble ${role === 'user' ? 'user-bubble' : 'model-bubble'}`;
+    
+    // Escape HTML but format markdown elements
+    let html = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/\n/g, '<br>');
+        
+    // Format bullet points starting with - or *
+    if (html.includes('<br>- ') || html.startsWith('- ') || html.includes('<br>* ') || html.startsWith('* ')) {
+        const lines = text.split('\n');
+        let formatted = '';
+        let inList = false;
+        
+        lines.forEach(line => {
+            const cleanLine = line.trim();
+            if (cleanLine.startsWith('- ') || cleanLine.startsWith('* ')) {
+                if (!inList) {
+                    formatted += '<ul>';
+                    inList = true;
+                }
+                const content = cleanLine.substring(2)
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>');
+                formatted += `<li>${content}</li>`;
+            } else {
+                if (inList) {
+                    formatted += '</ul>';
+                    inList = false;
+                }
+                formatted += `<p>${line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>')}</p>`;
+            }
+        });
+        if (inList) formatted += '</ul>';
+        html = formatted;
+    } else {
+        // Wrap everything in paragraphs
+        html = html.split('<br><br>').map(p => `<p>${p}</p>`).join('');
+    }
+    
+    bubble.innerHTML = html;
+    chatMessagesContainer.appendChild(bubble);
+    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+}
+
+function appendTypingIndicator() {
+    const bubble = document.createElement('div');
+    bubble.className = 'chat-bubble model-bubble';
+    bubble.innerHTML = `
+        <div class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    `;
+    chatMessagesContainer.appendChild(bubble);
+    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    return bubble;
 }
